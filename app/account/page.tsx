@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, Calendar, Camera, Upload } from 'lucide-react';
-import Sidebar from '../../components/Sidebar';
-import TextField from '../../components/TextField';
-import Button from '../../components/Button';
+import Sidebar from '../components/Sidebar';
+import TextField from '../components/TextField';
+import Button from '../components/Button';
+import { userAPI, UserData } from '../lib/api';
 
 interface FormData {
   first_name: string;
@@ -16,17 +17,6 @@ interface FormData {
   birthday: string;
 }
 
-interface UserData {
-  id: number;
-  email: string;
-  first_name: string;
-  last_name: string;
-  address: string;
-  contact_number: string;
-  birthday: string | null;
-  profile_image: string | null;
-  bio: string;
-}
 
 export default function AccountPage() {
   const router = useRouter();
@@ -58,33 +48,7 @@ export default function AccountPage() {
   const fetchUserData = async () => {
     try {
       setIsLoading(true);
-      const accessToken = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
-      if (!accessToken) {
-        router.push('/login');
-        return;
-      }
-
-      const response = await fetch('https://todo-app.pioneeralpha.com/api/users/me/', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          sessionStorage.removeItem('access_token');
-          sessionStorage.removeItem('refresh_token');
-          router.push('/login');
-          return;
-        }
-        throw new Error('Failed to fetch user data');
-      }
-
-      const data: UserData = await response.json();
+      const data = await userAPI.getCurrentUser();
       setUserData(data);
       
       const birthdayValue = data.birthday 
@@ -112,7 +76,7 @@ export default function AccountPage() {
 
   useEffect(() => {
     fetchUserData();
-  }, [router]);
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -141,48 +105,14 @@ export default function AccountPage() {
     setSaveSuccess(false);
 
     try {
-      const accessToken = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
-      if (!accessToken) {
-        router.push('/login');
-        return;
-      }
-
-      const formDataToSend = new FormData();
-      formDataToSend.append('first_name', formData.first_name);
-      formDataToSend.append('last_name', formData.last_name);
-      formDataToSend.append('address', formData.address);
-      formDataToSend.append('contact_number', formData.contact_number);
-      
-      if (formData.birthday) {
-        formDataToSend.append('birthday', formData.birthday);
-      }
-
-      if (selectedImageFile) {
-        formDataToSend.append('profile_image', selectedImageFile);
-      }
-
-      const response = await fetch('https://todo-app.pioneeralpha.com/api/users/me/', {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: formDataToSend,
+      const updatedData = await userAPI.updateUser({
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        address: formData.address,
+        contact_number: formData.contact_number,
+        birthday: formData.birthday || undefined,
+        profile_image: selectedImageFile || undefined,
       });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          sessionStorage.removeItem('access_token');
-          sessionStorage.removeItem('refresh_token');
-          router.push('/login');
-          return;
-        }
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || errorData.detail || 'Failed to update profile');
-      }
-
-      const updatedData: UserData = await response.json();
       
       setUserData(updatedData);
       

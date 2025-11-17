@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import TextField from '../components/TextField';
 import Button from '../components/Button';
 import Checkbox from '../components/Checkbox';
+import { authAPI, LoginResponse } from '../lib/api';
 
 interface FormData {
   email: string;
@@ -18,11 +19,6 @@ interface FormErrors {
   email?: string;
   password?: string;
   general?: string;
-}
-
-interface LoginResponse {
-  refresh: string;
-  access: string;
 }
 
 export default function LoginPage() {
@@ -104,32 +100,15 @@ export default function LoginPage() {
     setErrors({});
 
     try {
-      const formDataToSend = new FormData();
-      formDataToSend.append('email', formData.email);
-      formDataToSend.append('password', formData.password);
-
-      const response = await fetch('https://todo-app.pioneeralpha.com/api/auth/login/', {
-        method: 'POST',
-        body: formDataToSend,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        setErrors({
-          general: errorData.message || errorData.detail || 'Invalid email or password. Please try again.',
-        });
-        return;
-      }
-
-      const data: LoginResponse = await response.json();
+      const data = await authAPI.login(formData.email, formData.password);
       
       storeTokens(data.access, data.refresh);
 
-      router.push('/dashboard');
+      router.push('/');
       
     } catch (error) {
       setErrors({
-        general: 'Network error. Please check your connection and try again.',
+        general: error instanceof Error ? error.message : 'Network error. Please check your connection and try again.',
       });
     } finally {
       setIsSubmitting(false);

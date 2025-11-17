@@ -9,6 +9,7 @@ import Button from '../components/Button';
 import AddTaskModal from '../components/AddTaskModal';
 import EditTaskModal from '../components/EditTaskModal';
 import FilterDropdown from '../components/FilterDropdown';
+import { userAPI, todoAPI, UserData, Todo } from '../lib/api';
 
 interface Task {
   id: string;
@@ -18,17 +19,6 @@ interface Task {
   dueDate: string;
 }
 
-interface UserData {
-  id: number;
-  email: string;
-  first_name: string;
-  last_name: string;
-  address: string;
-  contact_number: string;
-  birthday: string | null;
-  profile_image: string | null;
-  bio: string;
-}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -83,33 +73,7 @@ export default function DashboardPage() {
 
   const fetchUserData = async () => {
     try {
-      const accessToken = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
-      if (!accessToken) {
-        router.push('/login');
-        return;
-      }
-
-      const response = await fetch('https://todo-app.pioneeralpha.com/api/users/me/', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          sessionStorage.removeItem('access_token');
-          sessionStorage.removeItem('refresh_token');
-          router.push('/login');
-          return;
-        }
-        throw new Error('Failed to fetch user data');
-      }
-
-      const data: UserData = await response.json();
+      const data = await userAPI.getCurrentUser();
       setUserData(data);
     } catch (err) {
       console.error('Error fetching user data:', err);
@@ -148,60 +112,28 @@ export default function DashboardPage() {
       setIsLoading(true);
       setError(null);
 
-      const accessToken = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
-      if (!accessToken) {
-        router.push('/login');
-        return;
-      }
-
-      const params = new URLSearchParams();
-
-      if (search && search.trim()) {
-        params.append('search', search.trim());
-      }
-
       const activeFilters = filters || selectedFilters;
+      let todoDate: string | undefined;
+      
       if (activeFilters.length > 0) {
         const firstFilter = activeFilters[0];
         const dateValue = getDateFilterValue(firstFilter);
         if (dateValue) {
-          params.append('todo_date', dateValue);
+          todoDate = dateValue;
         }
       }
 
-      const queryString = params.toString();
-      const url = `https://todo-app.pioneeralpha.com/api/todos/${queryString ? `?${queryString}` : ''}`;
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
+      const todos = await todoAPI.getTodos({
+        search: search?.trim(),
+        todo_date: todoDate,
       });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          sessionStorage.removeItem('access_token');
-          sessionStorage.removeItem('refresh_token');
-          router.push('/login');
-          return;
-        }
-        throw new Error('Failed to fetch todos');
-      }
-
-      const data = await response.json();
       
-      const todosArray = Array.isArray(data) ? data : (data.results || data.todos || []);
-      
-      const mappedTasks: Task[] = todosArray.map((todo: any) => ({
-        id: todo.id?.toString() || todo.pk?.toString() || Math.random().toString(),
-        title: todo.title || todo.name || 'Untitled Task',
-        description: todo.description || todo.desc || '',
-        priority: mapPriority(todo.priority || todo.priority_level || 'low'),
-        dueDate: todo.todo_date ? formatDate(todo.todo_date) : (todo.todo_date || 'No due date'),
+      const mappedTasks: Task[] = todos.map((todo: Todo) => ({
+        id: todo.id.toString(),
+        title: todo.title || 'Untitled Task',
+        description: todo.description || '',
+        priority: mapPriority(todo.priority || 'low'),
+        dueDate: todo.todo_date ? formatDate(todo.todo_date) : 'No due date',
       }));
 
       setTasks(mappedTasks);
@@ -222,7 +154,7 @@ export default function DashboardPage() {
 
     fetchUserData();
     fetchTodos();
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -242,31 +174,7 @@ export default function DashboardPage() {
 
   const handleDelete = async (id: string) => {
     try {
-      const accessToken = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
-      if (!accessToken) {
-        router.push('/login');
-        return;
-      }
-
-      const response = await fetch(`https://todo-app.pioneeralpha.com/api/todos/${id}/`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          sessionStorage.removeItem('access_token');
-          sessionStorage.removeItem('refresh_token');
-          router.push('/login');
-          return;
-        }
-        throw new Error('Failed to delete task');
-      }
-
+      await todoAPI.deleteTodo(id);
       await fetchTodos(searchQuery, selectedFilters);
     } catch (err) {
       console.error('Error deleting task:', err);
@@ -280,39 +188,12 @@ export default function DashboardPage() {
     priority: string;
     todo_date: string;
   }) => {
-    const accessToken = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
-    if (!accessToken) {
-      router.push('/login');
-      throw new Error('Not authenticated');
-    }
-
-    const formData = new FormData();
-    formData.append('title', taskData.title);
-    formData.append('description', taskData.description);
-    formData.append('priority', taskData.priority);
-    formData.append('todo_date', taskData.todo_date);
-
-    const response = await fetch(`https://todo-app.pioneeralpha.com/api/todos/${taskId}/`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: formData,
+    await todoAPI.updateTodo(taskId, {
+      title: taskData.title,
+      description: taskData.description,
+      priority: taskData.priority,
+      todo_date: taskData.todo_date,
     });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        sessionStorage.removeItem('access_token');
-        sessionStorage.removeItem('refresh_token');
-        router.push('/login');
-        throw new Error('Authentication failed');
-      }
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || errorData.detail || 'Failed to update task');
-    }
-
     await fetchTodos(searchQuery, selectedFilters);
   };
 
@@ -335,39 +216,12 @@ export default function DashboardPage() {
     priority: string;
     todo_date: string;
   }) => {
-    const accessToken = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
-    if (!accessToken) {
-      router.push('/login');
-      throw new Error('Not authenticated');
-    }
-
-    const formData = new FormData();
-    formData.append('title', taskData.title);
-    formData.append('description', taskData.description);
-    formData.append('priority', taskData.priority);
-    formData.append('todo_date', taskData.todo_date);
-
-    const response = await fetch('https://todo-app.pioneeralpha.com/api/todos/', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: formData,
+    await todoAPI.createTodo({
+      title: taskData.title,
+      description: taskData.description,
+      priority: taskData.priority,
+      todo_date: taskData.todo_date,
     });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        sessionStorage.removeItem('access_token');
-        sessionStorage.removeItem('refresh_token');
-        router.push('/login');
-        throw new Error('Authentication failed');
-      }
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || errorData.detail || 'Failed to create task');
-    }
-
     await fetchTodos(searchQuery, selectedFilters);
   };
 

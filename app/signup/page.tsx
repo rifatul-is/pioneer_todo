@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import TextField from '../components/TextField';
 import Button from '../components/Button';
+import { authAPI } from '../lib/api';
 
 interface FormData {
   first_name: string;
@@ -116,31 +117,16 @@ export default function SignUpPage() {
     setErrors({});
 
     try {
-      const formDataToSend = new FormData();
-      formDataToSend.append('first_name', formData.first_name);
-      formDataToSend.append('last_name', formData.last_name);
-      formDataToSend.append('email', formData.email);
-      formDataToSend.append('password', formData.password);
-
-      const response = await fetch('https://todo-app.pioneeralpha.com/api/users/signup/', {
-        method: 'POST',
-        body: formDataToSend,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        setErrors({
-          general: errorData.message || 'Something went wrong. Please try again.',
-        });
-        return;
-      }
-
-      const data = await response.json();
-      console.log('Signup successful:', data);
+      await authAPI.signup(
+        formData.first_name,
+        formData.last_name,
+        formData.email,
+        formData.password
+      );
       
     } catch (error) {
       setErrors({
-        general: 'Network error. Please check your connection and try again.',
+        general: error instanceof Error ? error.message : 'Network error. Please check your connection and try again.',
       });
     } finally {
       setIsSubmitting(false);

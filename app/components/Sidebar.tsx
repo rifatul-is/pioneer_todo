@@ -31,15 +31,15 @@ export default function Sidebar({
   const navItems = [
     {
       name: 'Dashboard',
-      href: '/dashboard',
+      href: '/',
       icon: Home,
-      active: pathname === '/dashboard' && pathname !== '/dashboard/account',
+      active: pathname === '/',
     },
     {
       name: 'Account Information',
-      href: '/dashboard/account',
+      href: '/account',
       icon: User,
-      active: pathname === '/dashboard/account',
+      active: pathname === '/account',
     },
   ];
 
